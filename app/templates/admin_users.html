@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block page_title %}User Management{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:480px">
+  <div class="card-title">New user</div>
+  <form method="post" action="/admin/users/new">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label>Username</label>
+        <input class="form-control" name="username" required>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input class="form-control" type="email" name="email" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input class="form-control" type="password" name="password" required minlength="8">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select class="form-control" name="role">
+          <option value="viewer">viewer</option>
+          <option value="admin">admin</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" type="submit">Create user</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.email }}</td>
+        <td><span class="badge badge-{{ u.role }}">{{ u.role }}</span></td>
+        <td>
+          {% if u.active %}<span class="badge badge-ok">Active</span>
+          {% else %}<span class="badge badge-error">Inactive</span>{% endif %}
+        </td>
+        <td>{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '—' }}</td>
+        <td style="display:flex;gap:6px">
+          {% if u.id != user.id %}
+          <form method="post" action="/admin/users/{{ u.id }}/toggle">
+            <button class="btn btn-sm btn-outline" type="submit">
+              {{ "Deactivate" if u.active else "Activate" }}
+            </button>
+          </form>
+          {% endif %}
+          <form method="post" action="/admin/users/{{ u.id }}/reset-password"
+                onsubmit="let p=prompt('New password (min 8 chars):');if(!p||p.length<8)return false;this.new_password.value=p">
+            <input type="hidden" name="new_password" value="">
+            <button class="btn btn-sm btn-outline" type="submit">Reset pwd</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

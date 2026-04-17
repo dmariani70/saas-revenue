@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}About{% endblock %}
+{% block page_title %}About{% endblock %}
+
+{% block content %}
+<div style="max-width:600px;display:flex;flex-direction:column;gap:16px">
+
+  <div class="card">
+    <div class="card-title">Application</div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr>
+        <td style="padding:8px 0;color:var(--text-secondary);width:40%">Name</td>
+        <td style="padding:8px 0;font-weight:600">SaaS Monthly Revenue</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">Version</td>
+        <td style="padding:8px 0;font-weight:600">v{{ app_version }}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">Database</td>
+        <td style="padding:8px 0">{{ db_engine }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Data</div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr>
+        <td style="padding:8px 0;color:var(--text-secondary);width:40%">Active banks</td>
+        <td style="padding:8px 0">{{ active_banks }} / {{ total_banks }}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">Periods imported</td>
+        <td style="padding:8px 0">{{ total_periods }}</td>
+      </tr>
+      {% if data_range %}
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">Date range</td>
+        <td style="padding:8px 0">{{ data_range }}</td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Stack</div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr>
+        <td style="padding:8px 0;color:var(--text-secondary);width:40%">Python</td>
+        <td style="padding:8px 0">{{ python_version }}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">FastAPI</td>
+        <td style="padding:8px 0">{{ fastapi_version }}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">SQLAlchemy</td>
+        <td style="padding:8px 0">{{ sqlalchemy_version }}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 0;color:var(--text-secondary)">Frontend</td>
+        <td style="padding:8px 0">Jinja2 + HTMX 2.0.4 + Chart.js 4.4.6</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+{% endblock %}

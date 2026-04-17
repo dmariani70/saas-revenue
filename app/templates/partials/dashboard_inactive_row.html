@@ -1,0 +1,34 @@
+<tr style="opacity:0.65" id="inactive-bank-row-{{ row.bank.id }}">
+  <td>
+    <div style="display:flex;align-items:center;gap:10px">
+      <img src="/static/logos/{{ row.bank.code | lower }}.png" alt="{{ row.bank.name }}"
+           style="height:48px;width:72px;object-fit:contain;flex-shrink:0"
+           onerror="this.style.display='none'">
+      <strong>{{ row.bank.name }}</strong>
+    </div>
+  </td>
+  <td>{{ row.bank.currency }}</td>
+  <td>
+    {% if row.latest %}
+      {{ month_names[row.latest.month] }} {{ row.latest.year }}
+    {% else %}
+      <span style="color:var(--muted)">No data</span>
+    {% endif %}
+  </td>
+  <td class="num">{{ "{:,.0f}".format(row.latest.total_txs) if row.latest else "—" }}</td>
+  <td class="num">{{ "$ {:,.2f}".format(row.latest.amount_usd) if row.latest else "—" }}</td>
+  <td class="num">
+    {% if row.latest and row.latest.total_to_bill %}
+      $ {{ "{:,.2f}".format(row.latest.total_to_bill) }}
+    {% else %}—{% endif %}
+  </td>
+  <td style="white-space:nowrap">
+    <a class="btn btn-sm btn-outline" href="/banks/{{ row.bank.id }}">View detail</a>
+    {% if user.role == "admin" %}
+    <button class="btn btn-sm btn-primary" type="button" style="font-size:12px"
+      hx-post="/banks/{{ row.bank.id }}/toggle-active"
+      hx-target="#inactive-bank-row-{{ row.bank.id }}"
+      hx-swap="outerHTML">Reactivate</button>
+    {% endif %}
+  </td>
+</tr>

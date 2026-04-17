@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SaaS Revenue{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-title">Summary by bank — latest period with data</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Bank</th>
+        <th>Currency</th>
+        <th>Period</th>
+        <th class="num">Total Txs</th>
+        <th class="num">Original Amount</th>
+        <th class="num">Amount USD</th>
+        <th class="num">Avg / Tx (USD)</th>
+        <th class="num">Total to Bill</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      {% include "partials/dashboard_bank_row.html" %}
+      {% else %}
+      <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">
+        No data yet. <a href="/imports">Import a file</a>.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if inactive_rows %}
+<div class="card" style="margin-top:24px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div class="card-title" style="margin:0;color:var(--muted)">Inactive projects</div>
+    <button class="btn btn-sm" id="toggle-inactive"
+      style="background:transparent;border:1px solid var(--border);font-size:12px"
+      onclick="toggleInactive()">Show</button>
+  </div>
+  <div id="inactive-section" style="display:none">
+  <table>
+    <thead>
+      <tr>
+        <th>Bank</th>
+        <th>Currency</th>
+        <th>Last period</th>
+        <th class="num">Total Txs</th>
+        <th class="num">Amount USD</th>
+        <th class="num">Total to Bill</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in inactive_rows %}
+      {% include "partials/dashboard_inactive_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+<script>
+function toggleInactive() {
+  const sec = document.getElementById('inactive-section');
+  const btn = document.getElementById('toggle-inactive');
+  const visible = sec.style.display !== 'none';
+  sec.style.display = visible ? 'none' : '';
+  btn.textContent = visible ? 'Show' : 'Hide';
+}
+</script>
+{% endif %}
+{% endblock %}

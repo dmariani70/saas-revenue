@@ -1,0 +1,16 @@
+<tr data-currency="{{ r.currency }}" data-year="{{ r.year }}" data-ygrp="yr{{ r.year }}" id="rate-row-{{ r.id }}">
+  <td><strong>{{ r.currency }}</strong></td>
+  <td>{{ r.year }}</td>
+  <td>{{ "%02d" % r.month }}</td>
+  <td class="num">{{ "{:,.6f}".format(r.rate_usd) }}</td>
+  <td>{{ r.strategy }}</td>
+  <td style="color:var(--muted)">{{ r.source or '—' }}</td>
+  {% if user.role == 'admin' %}
+  <td>
+    <button class="btn btn-sm btn-danger" type="button"
+      hx-delete="/exchange-rates/{{ r.id }}/delete"
+      hx-target="#rate-row-{{ r.id }}"
+      hx-swap="outerHTML swap:1s">×</button>
+  </td>
+  {% endif %}
+</tr>

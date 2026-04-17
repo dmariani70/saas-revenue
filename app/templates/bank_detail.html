@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}{{ bank.name }}{% endblock %}
+{% block page_title %}
+<span style="display:inline-flex;align-items:center;gap:14px">
+  <img src="/static/logos/{{ bank.code | lower }}.png" alt="{{ bank.name }}"
+       style="height:48px;width:auto;object-fit:contain;vertical-align:middle"
+       onerror="this.style.display='none'">
+  {{ bank.name }} ({{ bank.currency }})
+</span>
+{% endblock %}
+
+{% block topbar_actions %}
+<a class="btn btn-sm btn-outline" href="/banks">← Back</a>
+{% endblock %}
+
+{% block content %}
+{% if metrics %}
+{% set last = metrics[-1] %}
+<div class="cards-grid">
+  <div class="stat-card">
+    <div class="stat-label">Latest period</div>
+    <div class="stat-value">{{ month_names[last.month] }} {{ last.year }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Txs</div>
+    <div class="stat-value">{{ "{:,.0f}".format(last.total_txs) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Amount USD</div>
+    <div class="stat-value">$ {{ "{:,.0f}".format(last.amount_usd) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total to Bill</div>
+    <div class="stat-value">$ {{ "{:,.2f}".format(last.total_to_bill or 0) }}</div>
+    <div class="stat-sub">Minimum USD 750</div>
+  </div>
+</div>
+{% endif %}
+
+<div id="chart-controls" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+  <div class="card">
+    <div class="card-title" id="titleUsd">Amount USD per month</div>
+    <div class="chart-container"><canvas id="chartUsd"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title" id="titleTxs">Transactions per month</div>
+    <div class="chart-container"><canvas id="chartTxs"></canvas></div>
+  </div>
+</div>
+
+<div class="card" id="pivot-card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div class="card-title" style="margin:0">Monthly history</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm" onclick="pivotExpandAll()" style="background:transparent;border:1px solid var(--border)">Expand all</button>
+      <button class="btn btn-sm" onclick="pivotCollapseAll()" style="background:transparent;border:1px solid var(--border)">Collapse all</button>
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+  <table id="pivot-table" style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">Period</th>
+        <th class="num" style="padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">Total Txs</th>
+        <th class="num" style="padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">Amount {{ bank.currency }}</th>
+        <th class="num" style="padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">Amount USD</th>
+        <th class="num" style="padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">Avg / Tx USD</th>
+        <th class="num" style="padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">Contract rate</th>
+        <th class="num" style="padding:8px 12px;border-bottom:2px solid var(--border);white-space:nowrap">To Bill</th>
+      </tr>
+    </thead>
+    <tbody id="pivot-body"></tbody>
+  </table>
+  </div>
+</div>
+
+<style>
+.pivot-year-row { cursor:pointer; user-select:none; }
+.pivot-year-row:hover td { filter: brightness(0.95); }
+.pivot-year-row td {
+  padding:9px 12px;
+  font-weight:700;
+  background:var(--bg-subtle, #f3f4f6);
+  border-bottom:1px solid var(--border);
+  font-size:13px;
+}
+.pivot-month-row td {
+  padding:7px 12px 7px 28px;
+  border-bottom:1px solid var(--border);
+  font-size:13px;
+}
+.pivot-total-row td {
+  padding:10px 12px;
+  font-weight:700;
+  border-top:2px solid var(--border);
+  background:var(--bg-subtle, #f3f4f6);
+  font-size:13px;
+}
+.pivot-toggle { display:inline-block; width:14px; font-size:11px; transition:transform .2s; }
+.pivot-toggle.open { transform: rotate(90deg); display:inline-block; }
+td.num { text-align:right; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var DATA = {{ metrics_json | safe }};
+  var MN   = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function n2(v, d) {
+    if (v == null) return '&mdash;';
+    d = d == null ? 2 : d;
+    return parseFloat(v).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  function nTx(v) {
+    if (v == null) return '&mdash;';
+    return parseInt(v).toLocaleString('en-US');
+  }
+
+  function agg(rows) {
+    var txs = 0, orig = 0, usd = 0, bill = 0;
+    for (var i = 0; i < rows.length; i++) {
+      txs  += rows[i].total_txs || 0;
+      orig += rows[i].amount_orig || 0;
+      usd  += rows[i].amount_usd || 0;
+      bill += rows[i].total_to_bill || 0;
+    }
+    return { txs: txs, orig: orig, usd: usd, bill: bill, avg: txs ? usd / txs : 0 };
+  }
+
+  function aggCells(a) {
+    return '<td class="num">' + nTx(a.txs) + '</td>'
+         + '<td class="num">' + n2(a.orig) + '</td>'
+         + '<td class="num">$ ' + n2(a.usd) + '</td>'
+         + '<td class="num">$ ' + n2(a.avg, 6) + '</td>'
+         + '<td class="num">&mdash;</td>'
+         + '<td class="num"><strong>$ ' + n2(a.bill) + '</strong></td>';
+  }
+
+  function rowCells(r) {
+    return '<td class="num">' + nTx(r.total_txs) + '</td>'
+         + '<td class="num">' + n2(r.amount_orig) + '</td>'
+         + '<td class="num">$ ' + n2(r.amount_usd) + '</td>'
+         + '<td class="num">' + (r.avg_per_tx_usd ? '$ ' + n2(r.avg_per_tx_usd, 6) : '&mdash;') + '</td>'
+         + '<td class="num">' + (r.contract_amount != null ? '$ ' + n2(r.contract_amount, 4) : '&mdash;') + '</td>'
+         + '<td class="num"><strong>' + (r.total_to_bill != null ? '$ ' + n2(r.total_to_bill) : '&mdash;') + '</strong></td>';
+  }
+
+  function buildPivot() {
+    var body = document.getElementById('pivot-body');
+    if (!body) return;
+
+    if (!DATA.length) {
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px">No data.</td></tr>';
+      return;
+    }
+
+    // group by year
+    var byYear = {}, years = [];
+    for (var i = 0; i < DATA.length; i++) {
+      var y = DATA[i].year;
+      if (!byYear[y]) { byYear[y] = []; years.push(y); }
+      byYear[y].push(DATA[i]);
+    }
+    years.sort(function(a,b){ return b - a; });
+
+    var html = '';
+    for (var yi = 0; yi < years.length; yi++) {
+      var year = years[yi];
+      var rows = byYear[year].slice().sort(function(a,b){ return b.month - a.month; });
+      var a    = agg(rows);
+      var yid  = 'yr' + year;
+
+      html += '<tr class="pivot-year-row" data-yid="' + yid + '">'
+            + '<td><span class="pivot-toggle open" id="tog' + yid + '">&#9654;</span> ' + year + '</td>'
+            + aggCells(a) + '</tr>';
+
+      for (var ri = 0; ri < rows.length; ri++) {
+        var r = rows[ri];
+        html += '<tr class="pivot-month-row" data-ygrp="' + yid + '">'
+              + '<td style="padding-left:28px">' + MN[r.month] + ' ' + r.year + '</td>'
+              + rowCells(r) + '</tr>';
+      }
+    }
+
+    var ga = agg(DATA);
+    html += '<tr class="pivot-total-row"><td>Grand Total</td>' + aggCells(ga) + '</tr>';
+    body.innerHTML = html;
+
+    // event delegation
+    body.addEventListener('click', function(e) {
+      var row = e.target.closest('tr.pivot-year-row');
+      if (!row) return;
+      toggleYear(row.dataset.yid);
+    });
+  }
+
+  function toggleYear(yid) {
+    var tog = document.getElementById('tog' + yid);
+    if (!tog) return;
+    var open = tog.classList.contains('open');
+    tog.classList.toggle('open', !open);
+    var rows = document.querySelectorAll('tr[data-ygrp="' + yid + '"]');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].style.display = open ? 'none' : '';
+    }
+  }
+
+  window.pivotExpandAll = function() {
+    var rows = document.querySelectorAll('.pivot-month-row');
+    for (var i = 0; i < rows.length; i++) rows[i].style.display = '';
+    var togs = document.querySelectorAll('.pivot-toggle');
+    for (var i = 0; i < togs.length; i++) togs[i].classList.add('open');
+  };
+
+  window.pivotCollapseAll = function() {
+    var rows = document.querySelectorAll('.pivot-month-row');
+    for (var i = 0; i < rows.length; i++) rows[i].style.display = 'none';
+    var togs = document.querySelectorAll('.pivot-toggle');
+    for (var i = 0; i < togs.length; i++) togs[i].classList.remove('open');
+  };
+
+  buildPivot();
+})();
+</script>
+<script>
+(function() {
+  var DATA = {{ metrics_json | safe }};
+  var MN = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var COLORS = ['#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899'];
+
+  var allYears = [];
+  DATA.forEach(function(r) { if (allYears.indexOf(r.year) === -1) allYears.push(r.year); });
+  allYears.sort(function(a,b){ return a-b; });
+
+  var mode = 'filter';
+  var filterYear = 'all';
+  var compareYears = {};
+  allYears.slice(-2).forEach(function(y){ compareYears[y] = true; });
+
+  var chartUsd, chartTxs;
+
+  function buildData() {
+    if (mode === 'filter') {
+      var rows = filterYear === 'all' ? DATA : DATA.filter(function(r){ return r.year == filterYear; });
+      rows = rows.slice().sort(function(a,b){ return a.year*12+a.month - b.year*12+b.month; });
+      return {
+        labels: rows.map(function(r){ return MN[r.month]+' '+r.year; }),
+        usd: [{ label:'Amount USD', data: rows.map(function(r){ return r.amount_usd; }), backgroundColor:'#3b82f6', borderRadius:4 }],
+        txs: [{ label:'Transactions', data: rows.map(function(r){ return r.total_txs; }), backgroundColor:'#10b981', borderRadius:4 }],
+        legend: false
+      };
+    } else {
+      var years = allYears.filter(function(y){ return !!compareYears[y]; });
+      if (!years.length) years = allYears.slice(-2);
+      var byYM = {};
+      DATA.forEach(function(r){
+        if (!byYM[r.year]) byYM[r.year] = {};
+        byYM[r.year][r.month] = r;
+      });
+      var usdDS = years.map(function(y,i){
+        return { label: String(y), backgroundColor: COLORS[i%COLORS.length], borderRadius:4,
+                 data: MN.slice(1).map(function(_,mi){ return byYM[y] && byYM[y][mi+1] ? byYM[y][mi+1].amount_usd : null; }) };
+      });
+      var txsDS = years.map(function(y,i){
+        return { label: String(y), backgroundColor: COLORS[i%COLORS.length], borderRadius:4,
+                 data: MN.slice(1).map(function(_,mi){ return byYM[y] && byYM[y][mi+1] ? byYM[y][mi+1].total_txs : null; }) };
+      });
+      return { labels: MN.slice(1), usd: usdDS, txs: txsDS, legend: true };
+    }
+  }
+
+  function applyData() {
+    var d = buildData();
+    [chartUsd, chartTxs].forEach(function(ch, ci) {
+      ch.data.labels = d.labels;
+      ch.data.datasets = ci === 0 ? d.usd : d.txs;
+      ch.options.plugins.legend.display = d.legend;
+      ch.update();
+    });
+    document.getElementById('titleUsd').textContent = mode === 'compare' ? 'Amount USD — year comparison' : 'Amount USD per month';
+    document.getElementById('titleTxs').textContent = mode === 'compare' ? 'Transactions — year comparison' : 'Transactions per month';
+  }
+
+  function pill(year, label, active, color) {
+    var s = active ? 'border:2px solid '+color+';color:'+color+';font-weight:700' : 'border:1px solid var(--border)';
+    return '<button class="btn btn-sm yr-pill" data-year="'+year+'" style="'+s+'">'+label+'</button>';
+  }
+
+  function renderControls() {
+    var el = document.getElementById('chart-controls');
+    var h = '';
+    if (mode === 'filter') {
+      h += pill('all', 'All', filterYear === 'all', '#6b7280');
+      allYears.forEach(function(y,i){ h += pill(y, y, filterYear == y, COLORS[i%COLORS.length]); });
+      h += '<div style="margin-left:auto"><button class="btn btn-sm" id="btnCompare" style="border:1px solid var(--border)">&#8644; Compare years</button></div>';
+    } else {
+      h += '<span style="font-size:13px;font-weight:600;color:var(--text-secondary)">Compare:</span>';
+      allYears.forEach(function(y,i){ h += pill(y, y, !!compareYears[y], COLORS[i%COLORS.length]); });
+      h += '<div style="margin-left:auto"><button class="btn btn-sm" id="btnFilter" style="border:1px solid var(--border)">&#8592; Filter mode</button></div>';
+    }
+    el.innerHTML = h;
+    el.querySelectorAll('.yr-pill').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var y = this.dataset.year;
+        if (mode === 'filter') {
+          filterYear = y;
+        } else {
+          compareYears[y] = !compareYears[y];
+        }
+        renderControls();
+        applyData();
+      });
+    });
+    var bc = el.querySelector('#btnCompare');
+    if (bc) bc.addEventListener('click', function(){ mode='compare'; renderControls(); applyData(); });
+    var bf = el.querySelector('#btnFilter');
+    if (bf) bf.addEventListener('click', function(){ mode='filter'; renderControls(); applyData(); });
+  }
+
+  var d = buildData();
+  var mkOpts = function() {
+    return { responsive:true, maintainAspectRatio:false,
+             plugins:{ legend:{ display:false } },
+             scales:{ x:{ ticks:{ maxRotation:45 } }, y:{ beginAtZero:true } } };
+  };
+  chartUsd = new Chart(document.getElementById('chartUsd'), { type:'bar', data:{ labels:d.labels, datasets:d.usd }, options:mkOpts() });
+  chartTxs = new Chart(document.getElementById('chartTxs'), { type:'bar', data:{ labels:d.labels, datasets:d.txs }, options:mkOpts() });
+  renderControls();
+})();
+</script>
+{% endblock %}

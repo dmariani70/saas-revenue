@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block title %}Exchange Rates{% endblock %}
+{% block page_title %}Exchange Rates{% endblock %}
+
+{% block content %}
+
+{# ── Currency selector chips ── #}
+{% if loaded_currencies %}
+<div class="card" style="padding:16px 20px">
+  <div style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Loaded currencies</div>
+  <div id="currency-chips" style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for cur in loaded_currencies %}
+    <button
+      class="currency-chip"
+      data-currency="{{ cur }}"
+      onclick="selectCurrency('{{ cur }}')"
+      style="padding:6px 16px;border-radius:20px;border:2px solid var(--border);background:transparent;cursor:pointer;font-weight:600;font-size:13px;transition:all .15s">
+      {{ cur }}
+    </button>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Line chart ── #}
+<div class="card" id="chart-card" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div class="card-title" style="margin:0" id="chart-title">—</div>
+      <div id="chart-source" style="font-size:12px;color:var(--muted);margin-top:3px"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="display:none;font-size:12px;color:var(--muted);margin-right:2px">Estrategia:</span>
+      <button onclick="setStrategy('first_day')" id="btn-strat-first_day" class="btn btn-sm btn-primary" style="display:none">Primer día</button>
+      <button onclick="setStrategy('avg')" id="btn-strat-avg" class="btn btn-sm" style="display:none;background:transparent;border:1px solid var(--border)">Promedio</button>
+      <button onclick="setView('all')" id="btn-all" class="btn btn-sm btn-primary">All</button>
+      {% for yr in range(2022, 2027) %}
+      <button onclick="setView({{ yr }})" id="btn-{{ yr }}" class="btn btn-sm" style="background:transparent;border:1px solid var(--border)">{{ yr }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  <canvas id="fx-chart" height="100"></canvas>
+</div>
+{% endif %}
+
+{# ── Sync buttons (admin only) ── #}
+{% if user.role == 'admin' %}
+<div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <button id="sync-btn" class="btn btn-primary" onclick="syncRates(false)">
+    ↻ Fill missing
+  </button>
+  <span id="sync-status" style="font-size:13px;color:var(--muted)"></span>
+</div>
+{% endif %}
+
+
+{# ── Rates table ── #}
+<div class="card" id="rates-table-card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div class="card-title" style="margin:0" id="table-title">All exchange rates</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm" onclick="fxExpandAll()" style="background:transparent;border:1px solid var(--border)">Expand all</button>
+      <button class="btn btn-sm" onclick="fxCollapseAll()" style="background:transparent;border:1px solid var(--border)">Collapse all</button>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Currency</th>
+        <th>Year</th>
+        <th>Month</th>
+        <th class="num">Rate (/ USD)</th>
+        <th>Strategy</th>
+        <th>Source</th>
+        {% if user.role == 'admin' %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody id="rates-tbody">
+      {% if rates %}
+        {% for year, year_rates in rates | groupby('year') %}
+        <tr class="fx-year-row" data-year-header="{{ year }}" data-yid="yr{{ year }}" onclick="fxToggleYear('yr{{ year }}')">
+          <td colspan="{% if user.role == 'admin' %}7{% else %}6{% endif %}">
+            <span class="fx-toggle open" id="togyr{{ year }}">&#9654;</span> {{ year }}
+          </td>
+        </tr>
+        {% for r in year_rates %}
+        {% include "partials/exchange_rate_row.html" %}
+        {% endfor %}
+        {% endfor %}
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No rates found.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+.fx-year-row { cursor: pointer; user-select: none; }
+.fx-year-row:hover td { filter: brightness(0.95); }
+.fx-year-row td {
+  padding: 7px 12px;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  background: var(--bg-subtle, #f3f4f6);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.fx-toggle { display: inline-block; width: 14px; font-size: 11px; transition: transform .2s; }
+.fx-toggle.open { transform: rotate(90deg); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const ALL_RATES = {{ rates_json | safe }};
+let chart = null;
+let activeCurrency = null;
+let activeView = 'all';
+let activeStrategy = 'first_day';
+
+const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function selectCurrency(cur) {
+  activeCurrency = cur;
+  activeView = 'all';
+
+  // Update chip styles
+  document.querySelectorAll('.currency-chip').forEach(btn => {
+    const active = btn.dataset.currency === cur;
+    btn.style.background = active ? 'var(--primary, #4f46e5)' : 'transparent';
+    btn.style.color = active ? '#fff' : '';
+    btn.style.borderColor = active ? 'var(--primary, #4f46e5)' : 'var(--border)';
+  });
+
+  document.getElementById('chart-title').textContent = cur + ' / USD';
+  document.getElementById('chart-card').style.display = '';
+  document.getElementById('table-title').textContent = cur + ' — exchange rates';
+
+  const sources = [...new Set(ALL_RATES.filter(r => r.currency === cur && r.source).map(r => r.source))];
+  const sourceEl = document.getElementById('chart-source');
+  sourceEl.textContent = sources.length ? 'Source: ' + sources.join(', ') : '';
+
+  // Filter table rows and expand matching year groups
+  document.querySelectorAll('#rates-tbody tr[data-currency]').forEach(row => {
+    row.style.display = row.dataset.currency === cur ? '' : 'none';
+  });
+
+  // Show/hide year headers; expand years that have matching rows
+  document.querySelectorAll('#rates-tbody tr[data-year-header]').forEach(hdr => {
+    const yid = hdr.dataset.yid;
+    const yr  = hdr.dataset.yearHeader;
+    const matchingRows = [...document.querySelectorAll(`#rates-tbody tr[data-ygrp="${yid}"][data-currency="${cur}"]`)];
+    if (matchingRows.length) {
+      hdr.style.display = '';
+      // Expand the group so filtered rows are visible
+      matchingRows.forEach(r => r.style.display = '');
+      const tog = document.getElementById('tog' + yid);
+      if (tog) tog.classList.add('open');
+    } else {
+      hdr.style.display = 'none';
+    }
+  });
+
+  renderChart(cur, 'all');
+  highlightYearBtn('all');
+}
+
+function setStrategy(strategy) {
+  activeStrategy = strategy;
+  ['first_day','avg'].forEach(s => {
+    const btn = document.getElementById('btn-strat-' + s);
+    if (!btn) return;
+    if (s === strategy) {
+      btn.className = 'btn btn-sm btn-primary';
+      btn.style.background = '';
+      btn.style.border = '';
+    } else {
+      btn.className = 'btn btn-sm';
+      btn.style.background = 'transparent';
+      btn.style.border = '1px solid var(--border)';
+    }
+  });
+  renderChart(activeCurrency, activeView);
+}
+
+function setView(yr) {
+  activeView = yr;
+  renderChart(activeCurrency, yr);
+  highlightYearBtn(yr);
+}
+
+function highlightYearBtn(yr) {
+  ['all',2022,2023,2024,2025,2026].forEach(v => {
+    const btn = document.getElementById('btn-' + v);
+    if (!btn) return;
+    if (v === yr) {
+      btn.className = 'btn btn-sm btn-primary';
+      btn.style.background = '';
+      btn.style.border = '';
+    } else {
+      btn.className = 'btn btn-sm';
+      btn.style.background = 'transparent';
+      btn.style.border = '1px solid var(--border)';
+    }
+  });
+}
+
+function renderChart(cur, yr) {
+  let data = ALL_RATES.filter(r => r.currency === cur && r.strategy === activeStrategy);
+  if (yr !== 'all') data = data.filter(r => r.year === yr);
+
+  data.sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+
+  const labels = data.map(r => MONTHS[r.month - 1] + ' ' + r.year);
+  const values = data.map(r => r.rate_usd);
+
+  if (chart) chart.destroy();
+
+  const ctx = document.getElementById('fx-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: cur + ' / USD',
+        data: values,
+        borderColor: '#4f46e5',
+        backgroundColor: 'rgba(79,70,229,.08)',
+        borderWidth: 2,
+        pointRadius: data.length > 36 ? 2 : 4,
+        pointHoverRadius: 6,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.parsed.y.toFixed(6) + ' ' + cur + '/USD'
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: { callback: v => v.toLocaleString('es', {maximumFractionDigits: 4}) },
+          grid: { color: 'rgba(0,0,0,.06)' }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function fxToggleYear(yid) {
+  const tog = document.getElementById('tog' + yid);
+  if (!tog) return;
+  const open = tog.classList.contains('open');
+  tog.classList.toggle('open', !open);
+  document.querySelectorAll(`#rates-tbody tr[data-ygrp="${yid}"]`).forEach(row => {
+    row.style.display = open ? 'none' : '';
+  });
+}
+
+function fxExpandAll() {
+  document.querySelectorAll('#rates-tbody tr[data-ygrp]').forEach(r => r.style.display = '');
+  document.querySelectorAll('.fx-toggle').forEach(t => t.classList.add('open'));
+}
+
+function fxCollapseAll() {
+  document.querySelectorAll('#rates-tbody tr[data-ygrp]').forEach(r => r.style.display = 'none');
+  document.querySelectorAll('.fx-toggle').forEach(t => t.classList.remove('open'));
+}
+
+// Auto-select first currency on load
+{% if loaded_currencies %}
+selectCurrency('{{ loaded_currencies[0] }}');
+{% endif %}
+
+function confirmRefreshAll() {
+  if (confirm('Replace ALL exchange rates with API data? This will overwrite values loaded from Excel.')) {
+    syncRates(true);
+  }
+}
+
+async function syncRates(overwrite) {
+  const btn = overwrite ? document.getElementById('refresh-btn') : document.getElementById('sync-btn');
+  const status = document.getElementById('sync-status');
+  document.getElementById('sync-btn').disabled = true;
+  document.getElementById('refresh-btn').disabled = true;
+  btn.textContent = '↻ Procesando...';
+  status.textContent = 'Fetching from API, this may take a few seconds...';
+  try {
+    const url = '/exchange-rates/sync' + (overwrite ? '?overwrite=true' : '');
+    const resp = await fetch(url, { method: 'POST' });
+    const data = await resp.json();
+    const parts = [];
+    if (data.updated) parts.push(`${data.updated} updated`);
+    if (data.created) parts.push(`${data.created} created`);
+    if (data.skipped) parts.push(`${data.skipped} unchanged`);
+    if (data.failed) parts.push(`${data.failed} failed`);
+    status.textContent = 'Listo — ' + parts.join(', ');
+    if (data.updated || data.created) setTimeout(() => location.reload(), 1800);
+  } catch (e) {
+    status.textContent = 'Error connecting to the API';
+  } finally {
+    document.getElementById('sync-btn').disabled = false;
+    document.getElementById('refresh-btn').disabled = false;
+    document.getElementById('sync-btn').textContent = '↻ Fill missing';
+    document.getElementById('refresh-btn').textContent = '⟳ Reemplazar todo desde API';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Banks{% endblock %}
+{% block page_title %}Banks / Clients{% endblock %}
+
+{% block topbar_actions %}
+{% if user.role == 'admin' %}
+<a class="btn btn-primary btn-sm" href="/banks/new">+ New bank</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Code</th>
+        <th>Currency</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for bank in banks %}
+      <tr>
+        <td><strong>{{ bank.name }}</strong></td>
+        <td><code>{{ bank.code }}</code></td>
+        <td>{{ bank.currency }}</td>
+        <td>
+          {% if bank.active %}<span class="badge badge-ok">Active</span>
+          {% else %}<span class="badge badge-error">Inactive</span>{% endif %}
+        </td>
+        <td>
+          <a class="btn btn-sm btn-outline" href="/banks/{{ bank.id }}">View</a>
+          {% if user.role == 'admin' %}
+          <a class="btn btn-sm btn-outline" href="/banks/{{ bank.id }}/edit">Edit</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No banks registered.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

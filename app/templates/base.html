@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SaaS Revenue{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="sidebar-brand" href="/">📊 SaaS Revenue</a>
+    <nav>
+      <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>Dashboard</a>
+      {% if user.role == 'admin' %}
+      <a href="/banks" {% if request.url.path.startswith('/banks') %}class="active"{% endif %}>Banks</a>
+      <a href="/imports" {% if request.url.path.startswith('/imports') %}class="active"{% endif %}>Imports</a>
+      <a href="/contracts" {% if request.url.path.startswith('/contracts') %}class="active"{% endif %}>Contracts</a>
+      {% endif %}
+      <a href="/exchange-rates" {% if request.url.path.startswith('/exchange-rates') %}class="active"{% endif %}>Exchange Rates</a>
+      <a href="/billing-simulator" {% if request.url.path.startswith('/billing-simulator') %}class="active"{% endif %}>Billing Simulator</a>
+      {% if user.role == 'admin' %}
+      <a href="/admin/users" {% if request.url.path.startswith('/admin') %}class="active"{% endif %}>Users</a>
+      {% endif %}
+      <a href="/about" {% if request.url.path == '/about' %}class="active"{% endif %}>About</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div>{{ user.username }} &middot; <span class="badge badge-{{ user.role }}">{{ user.role }}</span></div>
+      <div style="margin-top:6px"><a href="/logout">Log out</a></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h1>{% block page_title %}{% endblock %}</h1>
+      <div>{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</body>
+</html>

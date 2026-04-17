@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if bank else "New" }} bank{% endblock %}
+{% block page_title %}{{ "Edit" if bank else "New" }} bank{% endblock %}
+
+{% block topbar_actions %}
+<a class="btn btn-sm btn-outline" href="/banks">← Back</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:480px">
+  <form method="post" action="{{ '/banks/' ~ bank.id ~ '/edit' if bank else '/banks/new' }}"
+        enctype="multipart/form-data">
+    {% if not bank %}
+    <div class="form-group">
+      <label>Code (e.g. ZANACO, CBE)</label>
+      <input class="form-control" name="code" required maxlength="16"
+             value="{{ bank.code if bank else '' }}">
+    </div>
+    {% endif %}
+    <div class="form-group">
+      <label>Name</label>
+      <input class="form-control" name="name" required value="{{ bank.name if bank else '' }}">
+    </div>
+
+    <div class="form-group">
+      <label>Source currency</label>
+      <input class="form-control" name="currency" required maxlength="8"
+             list="currency-list" autocomplete="off"
+             placeholder="Type code or name..."
+             value="{{ bank.currency if bank else '' }}">
+      <datalist id="currency-list">
+        {% for c in currencies %}
+        <option value="{{ c.code }}">{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </datalist>
+    </div>
+
+    <div class="form-group">
+      <label>Logo</label>
+      {% if bank %}
+      <div style="margin-bottom:8px">
+        <img id="logo-preview"
+             src="/static/logos/{{ bank.code | lower }}.png"
+             alt="{{ bank.name }}"
+             style="height:40px;width:auto;object-fit:contain;display:block"
+             onerror="this.style.display='none'">
+      </div>
+      {% endif %}
+      <input class="form-control" type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+      <small style="color:var(--muted)">PNG, JPG, WebP or SVG. Leave blank to keep current.</small>
+    </div>
+
+    {% if bank %}
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="active" value="true" {{ 'checked' if bank.active }}>
+        Active
+      </label>
+    </div>
+    {% endif %}
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+</div>
+{% endblock %}

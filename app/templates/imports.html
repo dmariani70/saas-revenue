@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Imports{% endblock %}
+{% block page_title %}Imports{% endblock %}
+
+{% block content %}
+{% set status = request.query_params.get('status') %}
+{% if status == 'ok' %}
+<div class="alert alert-success">Import successful — {{ request.query_params.get('rows', '') }} rows processed.</div>
+{% elif status == 'error' %}
+<div class="alert alert-error">Import failed. Check the history below.</div>
+{% elif status == 'duplicate' %}
+<div class="alert alert-error">This file has already been imported for this bank. Rename it or delete the previous import first.</div>
+{% endif %}
+
+{% if user.role == 'admin' %}
+<div class="card" style="max-width:520px">
+  <div class="card-title">Import CSV / TXT file</div>
+  <form method="post" action="/imports/upload" enctype="multipart/form-data">
+    <div class="form-group">
+      <label>Bank</label>
+      <select class="form-control" name="bank_id" required>
+        <option value="">— Select —</option>
+        {% for b in banks %}
+        <option value="{{ b.id }}">{{ b.name }} ({{ b.currency }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>CSV / TXT file</label>
+      <input class="form-control" type="file" name="file" accept=".csv,.txt" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Import</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-title">History (last 100 imports)</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Bank</th>
+        <th>Period</th>
+        <th>File</th>
+        <th class="num">Rows</th>
+        <th>Status</th>
+        <th>Imported at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for imp in imports %}
+      <tr>
+        <td>{{ imp.bank.name }}</td>
+        <td>{{ imp.year }}-{{ "%02d" % imp.month }}</td>
+        <td style="font-family:monospace;font-size:12px">{{ imp.filename }}</td>
+        <td class="num">{{ imp.row_count }}</td>
+        <td><span class="badge badge-{{ imp.status }}">{{ imp.status }}</span></td>
+        <td>{{ imp.imported_at.strftime('%Y-%m-%d %H:%M') if imp.imported_at else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No imports yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
