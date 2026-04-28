@@ -60,7 +60,9 @@ def import_file(
     A reimport for the same (bank, year, month) replaces previous data.
     """
     text = content.decode("utf-8-sig", errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
+    first_line = text.split("\n")[0]
+    delimiter = "\t" if "\t" in first_line else ","
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
 
     # Normalise column names (lowercase, strip)
     raw_rows = []
